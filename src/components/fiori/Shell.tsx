@@ -6,6 +6,7 @@ const navItems = [
   { label: "Chat", href: "/chat" },
   { label: "Mistakes", href: "/mistakes" },
   { label: "Vocabulary", href: "/vocabulary" },
+  { label: "Sessions", href: "/sessions" },
 ];
 
 export default function Shell({ children }: { children: ReactNode }) {

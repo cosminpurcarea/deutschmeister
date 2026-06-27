@@ -9,8 +9,19 @@ datasource db {
 
 model Session {
   id        String    @id @default(uuid())
+  title     String    @default("New conversation")
   createdAt DateTime  @default(now())
   mistakes  Mistake[]
+  messages  Message[]
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id])
+  role      String
+  content   String
+  createdAt DateTime @default(now())
 }
 
 model Mistake {

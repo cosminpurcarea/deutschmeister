@@ -11,6 +11,15 @@ vi.mock("@/lib/mistakeStore", () => ({
   topRepetitionPhrases: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock("@/lib/messageStore", () => ({
+  saveMessages: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/vocabularyStore", () => ({
+  activeVocabWords: vi.fn().mockResolvedValue([]),
+  updateVocabUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { POST } from "@/app/api/chat/route";
 import { deepseek } from "@/lib/deepseek";
 import { persistMistakes } from "@/lib/mistakeStore";

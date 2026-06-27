@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import type { ParsedMistake } from "@/lib/mistakeParser";
 
-export async function ensureSession(sessionId: string) {
+export async function ensureSession(sessionId: string, title?: string) {
   await prisma.session.upsert({
     where: { id: sessionId },
     update: {},
-    create: { id: sessionId },
+    create: { id: sessionId, title: title ?? "New conversation" },
   });
 }
 

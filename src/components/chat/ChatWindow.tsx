@@ -47,12 +47,9 @@ function parseAssistant(content: string) {
   const scenarios = parseScenarios(content);
   const mistakes = parseMistakes(content);
 
-  const correctionMatch = content.match(
-    /---CORRECTIONS---([\s\S]*?)---END---/,
-  );
+  const correctionMatch = content.match(/---CORRECTIONS---([\s\S]*?)---END---/);
   const hasCorrections = Boolean(correctionMatch);
-  const noMistakes =
-    hasCorrections && /keine fehler/i.test(correctionMatch![1]);
+  const noMistakes = hasCorrections && /keine fehler/i.test(correctionMatch![1]);
   const noteMatch = correctionMatch?.[1].match(/keine fehler!?\s*(.*)/i);
   const note = noteMatch?.[1]?.trim() || undefined;
 
@@ -64,18 +61,67 @@ function parseAssistant(content: string) {
   return { german, scenarios, mistakes, hasCorrections, noMistakes, note };
 }
 
+function AssistantMessage({
+  content,
+  sessionId,
+}: {
+  content: string;
+  sessionId: string;
+}) {
+  const parsed = parseAssistant(content);
+  return (
+    <div className="space-y-2">
+      {parsed.german && (
+        <MessageBubble role="assistant">
+          <GermanText text={parsed.german} sessionId={sessionId} />
+        </MessageBubble>
+      )}
+      {parsed.scenarios.map((s, i) => (
+        <ScenarioCard key={i} scenario={s} />
+      ))}
+      {parsed.mistakes.map((mk, i) => (
+        <CorrectionBlock key={i} mistake={mk} />
+      ))}
+      {parsed.hasCorrections && parsed.noMistakes && (
+        <CorrectionBlock note={parsed.note} />
+      )}
+    </div>
+  );
+}
+
 export default function ChatWindow() {
-  const [messages, setMessages] = useState<Message[]>([
-    { id: "greeting", role: "assistant", content: GREETING },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Load session and history on mount
   useEffect(() => {
-    setSessionId(getSessionId());
+    const sid = getSessionId();
+    setSessionId(sid);
+    fetch(`/api/messages?sessionId=${encodeURIComponent(sid)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        const saved: Message[] = (data.messages ?? []).map(
+          (m: { id: string; role: string; content: string }) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          }),
+        );
+        setMessages(
+          saved.length > 0
+            ? saved
+            : [{ id: "greeting", role: "assistant", content: GREETING }],
+        );
+      })
+      .catch(() =>
+        setMessages([{ id: "greeting", role: "assistant", content: GREETING }]),
+      )
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -88,15 +134,12 @@ export default function ChatWindow() {
 
     setError(null);
     const sid = sessionId || getSessionId();
-    const userMsg: Message = {
-      id: `u-${Date.now()}`,
-      role: "user",
-      content: text,
-    };
-    const history = [...messages, userMsg];
-    const assistantId = `a-${Date.now()}`;
+    const userMessageId = `u-${Date.now()}`;
+    const assistantMessageId = `a-${Date.now()}`;
 
-    setMessages([...history, { id: assistantId, role: "assistant", content: "" }]);
+    const userMsg: Message = { id: userMessageId, role: "user", content: text };
+    const history = [...messages.filter((m) => m.id !== "greeting"), userMsg];
+    setMessages([...history, { id: assistantMessageId, role: "assistant", content: "" }]);
     setInput("");
     setStreaming(true);
 
@@ -106,13 +149,13 @@ export default function ChatWindow() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionId: sid,
+          userMessageId,
+          assistantMessageId,
           messages: history.map(({ role, content }) => ({ role, content })),
         }),
       });
 
-      if (!res.ok || !res.body) {
-        throw new Error(`Chat request failed (${res.status})`);
-      }
+      if (!res.ok || !res.body) throw new Error(`Chat failed (${res.status})`);
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -122,13 +165,13 @@ export default function ChatWindow() {
         if (done) break;
         acc += decoder.decode(value, { stream: true });
         setMessages((prev) =>
-          prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m)),
+          prev.map((m) => (m.id === assistantMessageId ? { ...m, content: acc } : m)),
         );
       }
     } catch (err) {
       console.error(err);
       setError("Could not reach the teacher. Please try again.");
-      setMessages((prev) => prev.filter((m) => m.id !== assistantId));
+      setMessages((prev) => prev.filter((m) => m.id !== assistantMessageId));
     } finally {
       setStreaming(false);
     }
@@ -137,35 +180,23 @@ export default function ChatWindow() {
   return (
     <div className="mx-auto flex h-[calc(100vh-57px)] max-w-3xl flex-col">
       <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
-        {messages.map((m) => {
-          if (m.role === "user") {
-            return (
+        {loading ? (
+          <p className="text-xs text-fiori-muted">Loading conversation…</p>
+        ) : (
+          messages.map((m) =>
+            m.role === "user" ? (
               <MessageBubble key={m.id} role="user">
                 {m.content}
               </MessageBubble>
-            );
-          }
-
-          const parsed = parseAssistant(m.content);
-          return (
-            <div key={m.id} className="space-y-2">
-              {parsed.german && (
-                <MessageBubble role="assistant">
-                  <GermanText text={parsed.german} sessionId={sessionId} />
-                </MessageBubble>
-              )}
-              {parsed.scenarios.map((s, i) => (
-                <ScenarioCard key={i} scenario={s} />
-              ))}
-              {parsed.mistakes.map((mk, i) => (
-                <CorrectionBlock key={i} mistake={mk} />
-              ))}
-              {parsed.hasCorrections && parsed.noMistakes && (
-                <CorrectionBlock note={parsed.note} />
-              )}
-            </div>
-          );
-        })}
+            ) : (
+              <AssistantMessage
+                key={m.id}
+                content={m.content}
+                sessionId={sessionId}
+              />
+            ),
+          )
+        )}
         {streaming && (
           <p className="px-1 text-xs text-fiori-muted">DeutschMeister schreibt…</p>
         )}
@@ -181,7 +212,7 @@ export default function ChatWindow() {
         value={input}
         onChange={setInput}
         onSend={send}
-        disabled={streaming}
+        disabled={streaming || loading}
       />
     </div>
   );

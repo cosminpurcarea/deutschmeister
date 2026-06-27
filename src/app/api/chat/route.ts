@@ -8,6 +8,7 @@ import {
   topRepetitionPhrases,
 } from "@/lib/mistakeStore";
 import { activeVocabWords, updateVocabUsage } from "@/lib/vocabularyStore";
+import { saveMessages } from "@/lib/messageStore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,10 +21,15 @@ interface ChatMessage {
 export async function POST(req: NextRequest) {
   let sessionId: string;
   let messages: ChatMessage[];
+  let userMessageId: string;
+  let assistantMessageId: string;
+
   try {
     const body = await req.json();
     sessionId = body.sessionId;
     messages = body.messages;
+    userMessageId = body.userMessageId ?? `u-${Date.now()}`;
+    assistantMessageId = body.assistantMessageId ?? `a-${Date.now()}`;
   } catch {
     return new Response("Invalid request body", { status: 400 });
   }
@@ -32,7 +38,10 @@ export async function POST(req: NextRequest) {
     return new Response("sessionId and messages are required", { status: 400 });
   }
 
-  await ensureSession(sessionId);
+  const lastUserMessage = messages[messages.length - 1];
+  const sessionTitle = lastUserMessage?.content?.slice(0, 60) ?? "New conversation";
+
+  await ensureSession(sessionId, sessionTitle);
 
   const [phrases, vocabWords] = await Promise.all([
     topRepetitionPhrases(sessionId),
@@ -72,7 +81,16 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(delta));
           }
         }
+        // Persist messages + side effects after stream completes
         await Promise.all([
+          saveMessages(sessionId, [
+            {
+              id: userMessageId,
+              role: "user",
+              content: lastUserMessage?.content ?? "",
+            },
+            { id: assistantMessageId, role: "assistant", content: full },
+          ]),
           persistMistakes(sessionId, parseMistakes(full)),
           updateVocabUsage(sessionId, full),
         ]);
