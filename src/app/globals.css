@@ -1,0 +1,11 @@
+@import "../styles/fiori.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  color: var(--fiori-text-primary);
+  background: var(--fiori-background);
+  font-family: var(--fiori-font);
+}

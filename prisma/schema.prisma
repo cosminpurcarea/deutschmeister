@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id        String    @id @default(uuid())
+  createdAt DateTime  @default(now())
+  mistakes  Mistake[]
+}
+
+model Mistake {
+  id           String   @id @default(uuid())
+  sessionId    String
+  session      Session  @relation(fields: [sessionId], references: [id])
+  wrong        String
+  correct      String
+  explanation  String
+  repeatPhrase String
+  count        Int      @default(1)
+  topic        String   @default("general")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model RepetitionItem {
+  id           String   @id @default(uuid())
+  sessionId    String
+  mistakeId    String
+  phrase       String
+  drilledCount Int      @default(0)
+  mastered     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}

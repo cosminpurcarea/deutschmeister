@@ -1,0 +1,180 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { getSessionId } from "@/lib/sessionId";
+import { parseMistakes } from "@/lib/mistakeParser";
+import MessageBubble from "./MessageBubble";
+import CorrectionBlock from "./CorrectionBlock";
+import ScenarioCard, { Scenario } from "./ScenarioCard";
+import InputBar from "./InputBar";
+
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+}
+
+const GREETING =
+  "Hallo! Ich bin DeutschMeister, dein persönlicher Deutschlehrer. " +
+  "Worüber möchtest du heute sprechen? Schreib einfach auf Deutsch — ich korrigiere dich danach. 🙂";
+
+function valueAfterColon(line: string): string {
+  const idx = line.indexOf(":");
+  return (idx >= 0 ? line.slice(idx + 1) : line).trim();
+}
+
+function parseScenarios(content: string): Scenario[] {
+  const blocks = Array.from(
+    content.matchAll(/---SCENARIO---([\s\S]*?)---END---/g),
+  );
+  const scenarios: Scenario[] = [];
+  for (const block of blocks) {
+    const s: Scenario = {};
+    for (const line of block[1].split("\n")) {
+      const t = line.trim();
+      if (t.startsWith("🎭")) s.situation = valueAfterColon(t);
+      else if (t.startsWith("👤")) s.yourRole = valueAfterColon(t);
+      else if (t.startsWith("🤖")) s.myRole = valueAfterColon(t);
+      else if (t.startsWith("▶️")) s.opener = t.replace(/^▶️\s*/, "").trim();
+    }
+    scenarios.push(s);
+  }
+  return scenarios;
+}
+
+function parseAssistant(content: string) {
+  const scenarios = parseScenarios(content);
+  const mistakes = parseMistakes(content);
+
+  const correctionMatch = content.match(
+    /---CORRECTIONS---([\s\S]*?)---END---/,
+  );
+  const hasCorrections = Boolean(correctionMatch);
+  const noMistakes =
+    hasCorrections && /keine fehler/i.test(correctionMatch![1]);
+  const noteMatch = correctionMatch?.[1].match(/keine fehler!?\s*(.*)/i);
+  const note = noteMatch?.[1]?.trim() || undefined;
+
+  const german = content
+    .replace(/---SCENARIO---[\s\S]*?---END---/g, "")
+    .replace(/---CORRECTIONS---[\s\S]*?---END---/g, "")
+    .trim();
+
+  return { german, scenarios, mistakes, hasCorrections, noMistakes, note };
+}
+
+export default function ChatWindow() {
+  const [messages, setMessages] = useState<Message[]>([
+    { id: "greeting", role: "assistant", content: GREETING },
+  ]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [messages]);
+
+  async function send() {
+    const text = input.trim();
+    if (!text || streaming) return;
+
+    setError(null);
+    const sessionId = getSessionId();
+    const userMsg: Message = {
+      id: `u-${Date.now()}`,
+      role: "user",
+      content: text,
+    };
+    const history = [...messages, userMsg];
+    const assistantId = `a-${Date.now()}`;
+
+    setMessages([...history, { id: assistantId, role: "assistant", content: "" }]);
+    setInput("");
+    setStreaming(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId,
+          messages: history.map(({ role, content }) => ({ role, content })),
+        }),
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`Chat request failed (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, content: acc } : m)),
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Could not reach the teacher. Please try again.");
+      setMessages((prev) => prev.filter((m) => m.id !== assistantId));
+    } finally {
+      setStreaming(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto flex h-[calc(100vh-57px)] max-w-3xl flex-col">
+      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
+        {messages.map((m) => {
+          if (m.role === "user") {
+            return (
+              <MessageBubble key={m.id} role="user">
+                {m.content}
+              </MessageBubble>
+            );
+          }
+
+          const parsed = parseAssistant(m.content);
+          return (
+            <div key={m.id} className="space-y-2">
+              {parsed.german && (
+                <MessageBubble role="assistant">{parsed.german}</MessageBubble>
+              )}
+              {parsed.scenarios.map((s, i) => (
+                <ScenarioCard key={i} scenario={s} />
+              ))}
+              {parsed.mistakes.map((mk, i) => (
+                <CorrectionBlock key={i} mistake={mk} />
+              ))}
+              {parsed.hasCorrections && parsed.noMistakes && (
+                <CorrectionBlock note={parsed.note} />
+              )}
+            </div>
+          );
+        })}
+        {streaming && (
+          <p className="px-1 text-xs text-fiori-muted">DeutschMeister schreibt…</p>
+        )}
+      </div>
+
+      {error && (
+        <p className="px-4 py-1 text-xs text-fiori-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <InputBar
+        value={input}
+        onChange={setInput}
+        onSend={send}
+        disabled={streaming}
+      />
+    </div>
+  );
+}

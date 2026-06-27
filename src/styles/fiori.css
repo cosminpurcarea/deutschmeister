@@ -1,0 +1,13 @@
+/* SAP Fiori design tokens — single source of truth for DeutschMeister colors. */
+:root {
+  --fiori-blue: #0070f2;
+  --fiori-orange: #f0ab00;
+  --fiori-background: #ffffff;
+  --fiori-surface: #f5f6f7;
+  --fiori-border: #e5e5e5;
+  --fiori-text-primary: #32363a;
+  --fiori-text-secondary: #6a6d70;
+  --fiori-success: #107e3e;
+  --fiori-error: #bb0000;
+  --fiori-font: "72", Arial, sans-serif;
+}
