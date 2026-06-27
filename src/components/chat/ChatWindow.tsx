@@ -97,6 +97,7 @@ export default function ChatWindow() {
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevStreamingRef = useRef(false);
 
   // Load session and history on mount
   useEffect(() => {
@@ -125,8 +126,44 @@ export default function ChatWindow() {
   }, []);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages]);
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const wasStreaming = prevStreamingRef.current;
+    prevStreamingRef.current = streaming;
+
+    if (streaming) {
+      // While streaming, keep scrolling to bottom so the user sees incoming text
+      container.scrollTo({ top: container.scrollHeight });
+    } else if (wasStreaming) {
+      // Streaming just finished — scroll so the START of the last AI message is
+      // visible (not the bottom of the correction blocks which pushes it off-screen)
+      const children = Array.from(container.children);
+      const last = children[children.length - 1] as HTMLElement | undefined;
+      if (last) {
+        const containerTop = container.getBoundingClientRect().top;
+        const lastTop = last.getBoundingClientRect().top;
+        container.scrollTo({
+          top: container.scrollTop + (lastTop - containerTop) - 16,
+          behavior: "smooth",
+        });
+      }
+    } else {
+      // Initial load or any non-streaming change → show start of last message
+      // so German text (top of AssistantMessage) is visible, not correction blocks
+      const children = Array.from(container.children);
+      const last = children[children.length - 1] as HTMLElement | undefined;
+      if (last) {
+        const containerTop = container.getBoundingClientRect().top;
+        const lastTop = last.getBoundingClientRect().top;
+        container.scrollTo({
+          top: container.scrollTop + (lastTop - containerTop) - 16,
+        });
+      } else {
+        container.scrollTo({ top: container.scrollHeight });
+      }
+    }
+  }, [messages, streaming]);
 
   async function send() {
     const text = input.trim();

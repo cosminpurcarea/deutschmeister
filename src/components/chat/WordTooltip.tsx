@@ -161,6 +161,7 @@ export default function WordTooltip({ word, context, sessionId }: Props) {
         ref={spanRef}
         onMouseEnter={handleWordEnter}
         onMouseLeave={scheduleHide}
+        className="cursor-help"
       >
         {word}
       </span>
