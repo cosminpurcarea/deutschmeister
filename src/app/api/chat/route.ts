@@ -7,6 +7,7 @@ import {
   persistMistakes,
   topRepetitionPhrases,
 } from "@/lib/mistakeStore";
+import { activeVocabWords, updateVocabUsage } from "@/lib/vocabularyStore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,8 +33,13 @@ export async function POST(req: NextRequest) {
   }
 
   await ensureSession(sessionId);
-  const phrases = await topRepetitionPhrases(sessionId);
-  const system = buildSystemPrompt(phrases);
+
+  const [phrases, vocabWords] = await Promise.all([
+    topRepetitionPhrases(sessionId),
+    activeVocabWords(sessionId),
+  ]);
+
+  const system = buildSystemPrompt(phrases, vocabWords);
 
   let completion;
   try {
@@ -66,7 +72,10 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(delta));
           }
         }
-        await persistMistakes(sessionId, parseMistakes(full));
+        await Promise.all([
+          persistMistakes(sessionId, parseMistakes(full)),
+          updateVocabUsage(sessionId, full),
+        ]);
       } catch (err) {
         console.error("DeepSeek stream error:", err);
         controller.enqueue(

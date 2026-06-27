@@ -7,6 +7,7 @@ import MessageBubble from "./MessageBubble";
 import CorrectionBlock from "./CorrectionBlock";
 import ScenarioCard, { Scenario } from "./ScenarioCard";
 import InputBar from "./InputBar";
+import GermanText from "./GermanText";
 
 interface Message {
   id: string;
@@ -70,7 +71,12 @@ export default function ChatWindow() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSessionId(getSessionId());
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -81,7 +87,7 @@ export default function ChatWindow() {
     if (!text || streaming) return;
 
     setError(null);
-    const sessionId = getSessionId();
+    const sid = sessionId || getSessionId();
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       role: "user",
@@ -99,7 +105,7 @@ export default function ChatWindow() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sessionId,
+          sessionId: sid,
           messages: history.map(({ role, content }) => ({ role, content })),
         }),
       });
@@ -144,7 +150,9 @@ export default function ChatWindow() {
           return (
             <div key={m.id} className="space-y-2">
               {parsed.german && (
-                <MessageBubble role="assistant">{parsed.german}</MessageBubble>
+                <MessageBubble role="assistant">
+                  <GermanText text={parsed.german} sessionId={sessionId} />
+                </MessageBubble>
               )}
               {parsed.scenarios.map((s, i) => (
                 <ScenarioCard key={i} scenario={s} />

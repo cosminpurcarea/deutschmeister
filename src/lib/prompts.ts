@@ -37,18 +37,36 @@ Topic rotation for scenarios (cycle through these):
 - Social: small talk, making plans, texting a friend
 - Formal: Amt appointment, bank, landlord conversation`;
 
+export interface VocabWordBrief {
+  word: string;
+  translation: string;
+  gender?: string | null;
+}
+
 /**
- * Appends the top weak patterns from the RepetitionQueue to the system prompt
- * so the teacher naturally drills them in the next responses.
+ * Builds the final system prompt, appending:
+ *   1. RepetitionQueue patterns (grammar drill)
+ *   2. Active vocabulary words to weave into responses
  */
-export function buildSystemPrompt(repetitionPhrases: string[] = []): string {
+export function buildSystemPrompt(
+  repetitionPhrases: string[] = [],
+  vocabWords: VocabWordBrief[] = [],
+): string {
+  let prompt = TEACHER_SYSTEM_PROMPT;
+
   const phrases = repetitionPhrases.filter(Boolean).slice(0, 3);
-  if (phrases.length === 0) return TEACHER_SYSTEM_PROMPT;
+  if (phrases.length > 0) {
+    const list = phrases.map((p) => `- ${p}`).join("\n");
+    prompt += `\n\nPRIORITY REPETITION: The learner repeatedly makes these mistakes:\n${list}\nNaturally work these patterns into your next responses.`;
+  }
 
-  const list = phrases.map((p) => `- ${p}`).join("\n");
-  return `${TEACHER_SYSTEM_PROMPT}
+  const vocab = vocabWords.filter((v) => v.word).slice(0, 15);
+  if (vocab.length > 0) {
+    const list = vocab
+      .map((v) => `- ${v.word} (${v.translation}${v.gender ? ", " + v.gender : ""})`)
+      .join("\n");
+    prompt += `\n\nVOCABULARY DRILLING: The learner is actively building these German words — use them as naturally and as frequently as possible in every response, in varied contexts, until the learner clearly demonstrates correct and confident usage:\n${list}`;
+  }
 
-PRIORITY REPETITION: The learner repeatedly makes these mistakes:
-${list}
-Naturally work these patterns into your next responses.`;
+  return prompt;
 }

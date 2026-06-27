@@ -36,3 +36,19 @@ model RepetitionItem {
   mastered     Boolean  @default(false)
   createdAt    DateTime @default(now())
 }
+
+model VocabularyWord {
+  id           String   @id @default(uuid())
+  sessionId    String
+  word         String
+  translation  String
+  gender       String?
+  partOfSpeech String   @default("noun")
+  examples     String   @default("[]")
+  timesUsedByAI Int     @default(0)
+  mastered     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([sessionId, word])
+}
