@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { deepseek, DEEPSEEK_MODEL } from "@/lib/deepseek";
+import { parseMistakes } from "@/lib/mistakeParser";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,11 +20,15 @@ export async function POST(req: NextRequest) {
   let userTranslation: string;
   let sourceLang: string;
 
+  let sessionId: string;
+  let level: string;
   try {
     const body = await req.json();
     sourceText = body.sourceText;
     userTranslation = body.userTranslation;
     sourceLang = body.sourceLang ?? "en";
+    sessionId = body.sessionId ?? "";
+    level = body.level ?? "B1";
   } catch {
     return new Response("Invalid request body", { status: 400 });
   }
@@ -86,12 +92,28 @@ Finally, an overall assessment:
   }
 
   const encoder = new TextEncoder();
+  let full = "";
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
         for await (const chunk of completion) {
           const delta = chunk.choices?.[0]?.delta?.content ?? "";
-          if (delta) controller.enqueue(encoder.encode(delta));
+          if (delta) {
+            full += delta;
+            controller.enqueue(encoder.encode(delta));
+          }
+        }
+        // Persist the attempt so the dashboard can track translation accuracy
+        if (sessionId) {
+          await prisma.translationAttempt.create({
+            data: {
+              sessionId,
+              sourceLang,
+              level,
+              mistakeCount: parseMistakes(full).length,
+            },
+          });
         }
       } catch (err) {
         console.error("translate stream error:", err);

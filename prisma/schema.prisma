@@ -63,3 +63,12 @@ model VocabularyWord {
 
   @@unique([sessionId, word])
 }
+
+model TranslationAttempt {
+  id           String   @id @default(uuid())
+  sessionId    String
+  sourceLang   String   @default("en")
+  level        String   @default("B1")
+  mistakeCount Int      @default(0)
+  createdAt    DateTime @default(now())
+}

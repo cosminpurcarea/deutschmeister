@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { parseMistakes } from "@/lib/mistakeParser";
+import { getSessionId } from "@/lib/sessionId";
 import CorrectionBlock from "@/components/chat/CorrectionBlock";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ function parseFeedback(content: string) {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function TranslateWindow() {
+  const [sessionId] = useState(() => getSessionId());
   const [lang, setLang] = useState("en");
   const [level, setLevel] = useState("B1");
   const [paragraph, setParagraph] = useState<Paragraph | null>(null);
@@ -94,6 +96,8 @@ export default function TranslateWindow() {
           sourceText: paragraph.text,
           userTranslation: translation.trim(),
           sourceLang: lang,
+          level: paragraph.level,
+          sessionId,
         }),
       });
 
